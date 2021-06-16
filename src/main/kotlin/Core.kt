@@ -1,10 +1,17 @@
 package com.seansoper.laneDetector
 
-import org.opencv.core.Mat
-import org.opencv.core.Size
+import org.jetbrains.kotlinx.multik.api.empty
+import org.jetbrains.kotlinx.multik.api.mk
+import org.jetbrains.kotlinx.multik.api.ndarray
+import org.jetbrains.kotlinx.multik.ndarray.data.D2
+import org.jetbrains.kotlinx.multik.ndarray.operations.flatMap
+import org.jetbrains.kotlinx.multik.ndarray.operations.toList
+import org.opencv.core.*
+import org.opencv.core.Core.bitwise_and
+import org.opencv.core.CvType.CV_32S
 import org.opencv.highgui.HighGui
 import org.opencv.imgproc.Imgproc
-import org.opencv.imgproc.Imgproc.COLOR_RGB2GRAY
+import org.opencv.imgproc.Imgproc.*
 import org.opencv.videoio.VideoCapture
 import org.opencv.videoio.VideoWriter
 import org.opencv.videoio.Videoio
@@ -12,6 +19,7 @@ import java.io.File
 import javax.swing.ImageIcon
 import javax.swing.JLabel
 import javax.swing.WindowConstants.EXIT_ON_CLOSE
+import kotlin.system.exitProcess
 
 object Core {
     @JvmStatic
@@ -38,19 +46,26 @@ object Core {
         frame.contentPane = videoPanel
         frame.isVisible = true
 
+        var count = 0
+
         while (input.read(image)) {
             val canny = canny(image)
+            val segment = segment(canny) // should be canny
+
+//            println(segment)
 
             if (writer.isOpened) {
                 writer.write(canny)
                 //println("Wrote to file")
 
-                videoPanel.icon = ImageIcon(HighGui.toBufferedImage(canny))
-                videoPanel.repaint()
+//                if (count == 1) {
+                    println("wtf")
+                    videoPanel.icon = ImageIcon(HighGui.toBufferedImage(segment))
+                    videoPanel.repaint()
+//                }
+                count++
             }
         }
-
-
 
         input.release()
         writer.release()
@@ -65,6 +80,45 @@ object Core {
 
         val dest = Mat()
         Imgproc.Canny(blur, dest, 50.0, 150.0)
+
+        return dest
+    }
+
+    private fun segment(source: Mat): Mat {
+        val height = source.height().toDouble()
+        val width = source.width().toDouble()
+//        val polygons = mk.ndarray(mk[mk[0, height], mk[1200, height], mk[380, 290]])
+//        println(source.type())
+        val polygons: List<MatOfPoint> = listOf(
+            MatOfPoint(
+                Point(200.0, height),
+                Point(400.0, 200.0),
+                Point(1000.0, 200.0),
+                Point(width, height)
+            )
+        )
+
+        val polygons2: List<MatOfPoint> = listOf(
+            MatOfPoint(
+                Point(50.0, 50.0),
+                Point(100.0, 50.0),
+                Point(100.0, 100.0),
+                Point(50.0, 100.0)
+            )
+        )
+
+        // val mask = mk.empty<Double, D2>(source.width(), source.height())
+        val mask = Mat.zeros(source.rows(), source.cols(), 0)
+//        println(polygons)
+//        println(polygons.flatten())
+//        println(mask)
+//        polygons.toList().forEach()
+//        MatOfPoint().fromArray()
+        fillPoly(mask, polygons, Scalar(255.0))
+
+//        return mask
+        val dest = Mat()
+        bitwise_and(source, mask, dest)
 
         return dest
     }

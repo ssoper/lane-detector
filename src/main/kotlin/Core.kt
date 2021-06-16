@@ -1,16 +1,8 @@
 package com.seansoper.laneDetector
 
-import org.jetbrains.kotlinx.multik.api.empty
-import org.jetbrains.kotlinx.multik.api.mk
-import org.jetbrains.kotlinx.multik.api.ndarray
-import org.jetbrains.kotlinx.multik.ndarray.data.D2
-import org.jetbrains.kotlinx.multik.ndarray.operations.flatMap
-import org.jetbrains.kotlinx.multik.ndarray.operations.toList
 import org.opencv.core.*
 import org.opencv.core.Core.bitwise_and
-import org.opencv.core.CvType.CV_32S
 import org.opencv.highgui.HighGui
-import org.opencv.imgproc.Imgproc
 import org.opencv.imgproc.Imgproc.*
 import org.opencv.videoio.VideoCapture
 import org.opencv.videoio.VideoWriter
@@ -19,7 +11,6 @@ import java.io.File
 import javax.swing.ImageIcon
 import javax.swing.JLabel
 import javax.swing.WindowConstants.EXIT_ON_CLOSE
-import kotlin.system.exitProcess
 
 object Core {
     @JvmStatic
@@ -46,24 +37,17 @@ object Core {
         frame.contentPane = videoPanel
         frame.isVisible = true
 
-        var count = 0
-
         while (input.read(image)) {
             val canny = canny(image)
-            val segment = segment(canny) // should be canny
-
-//            println(segment)
+            val segment = segment(canny)
+            val hough = Mat()
+            HoughLinesP(segment, hough,2.0, Math.PI/180, 100, 100.0, 50.0)
 
             if (writer.isOpened) {
                 writer.write(canny)
-                //println("Wrote to file")
 
-//                if (count == 1) {
-                    println("wtf")
-                    videoPanel.icon = ImageIcon(HighGui.toBufferedImage(segment))
-                    videoPanel.repaint()
-//                }
-                count++
+                videoPanel.icon = ImageIcon(HighGui.toBufferedImage(segment))
+                videoPanel.repaint()
             }
         }
 
@@ -73,13 +57,13 @@ object Core {
 
     private fun canny(source: Mat): Mat {
         val gray = Mat()
-        Imgproc.cvtColor(source, gray, COLOR_RGB2GRAY)
+        cvtColor(source, gray, COLOR_RGB2GRAY)
 
         val blur = Mat()
-        Imgproc.GaussianBlur(gray, blur, Size(5.0, 5.0), 0.0)
+        GaussianBlur(gray, blur, Size(5.0, 5.0), 0.0)
 
         val dest = Mat()
-        Imgproc.Canny(blur, dest, 50.0, 150.0)
+        Canny(blur, dest, 50.0, 150.0)
 
         return dest
     }
@@ -91,9 +75,9 @@ object Core {
 //        println(source.type())
         val polygons: List<MatOfPoint> = listOf(
             MatOfPoint(
-                Point(200.0, height),
-                Point(400.0, 200.0),
-                Point(1000.0, 200.0),
+                Point(175.0, height),
+                Point(450.0, 400.0),
+                Point(900.0, 400.0),
                 Point(width, height)
             )
         )

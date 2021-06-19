@@ -54,11 +54,11 @@ object Core {
             val lines = getLines(segment)
             val visualized = visualize(image, lines)
 
-            if (writer.isOpened) {
-                writer.write(canny)
+            videoPanel.icon = ImageIcon(HighGui.toBufferedImage(visualized))
+            videoPanel.repaint()
 
-                videoPanel.icon = ImageIcon(HighGui.toBufferedImage(visualized))
-                videoPanel.repaint()
+            if (writer.isOpened) {
+                writer.write(visualized)
             }
         }
 

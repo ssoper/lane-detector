@@ -2,7 +2,7 @@
 
 Uses OpenCV to detect lane markers on the highway and highlight them.
 
-![Demo](docs/demo.mp4)
+![Demo](https://user-images.githubusercontent.com/12748/122929438-f101fa00-d338-11eb-840f-8dfd92d3a22e.mp4)
 
 ## Usage
 

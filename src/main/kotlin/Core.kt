@@ -1,72 +1,97 @@
 package com.seansoper.laneDetector
 
+import kotlinx.cli.ArgParser
+import kotlinx.cli.ArgType
+import kotlinx.cli.default
 import org.apache.commons.math3.fitting.PolynomialCurveFitter
 import org.apache.commons.math3.fitting.WeightedObservedPoints
-import org.apache.commons.math3.stat.StatUtils
-import org.jetbrains.kotlinx.multik.api.mk
-import org.jetbrains.kotlinx.multik.api.ndarray
-import org.jetbrains.kotlinx.multik.ndarray.data.D2
-import org.jetbrains.kotlinx.multik.ndarray.data.MultiArray
 import org.opencv.core.*
 import org.opencv.core.Core.addWeighted
 import org.opencv.core.Core.bitwise_and
 import org.opencv.highgui.HighGui
-import org.opencv.imgproc.Imgproc
 import org.opencv.imgproc.Imgproc.*
 import org.opencv.videoio.VideoCapture
 import org.opencv.videoio.VideoWriter
 import org.opencv.videoio.Videoio
 import java.io.File
-import java.lang.Double.NaN
 import javax.swing.ImageIcon
 import javax.swing.JLabel
 import javax.swing.WindowConstants.EXIT_ON_CLOSE
-import kotlin.system.exitProcess
 
 object Core {
     @JvmStatic
     fun main(args: Array<String>) {
+        val parser = ArgParser("laneDetector")
+        val inputFilePath by parser.option(ArgType.String, shortName = "i", description = "Path to input file").default("./samples/seattle.mp4")
+        val outputFilePath by parser.option(ArgType.String, shortName = "o", description = "Path to output file").default("./output.mov")
+        val showLive by parser.option(ArgType.Boolean, shortName = "s", description = "Opens a window showing the live encoding").default(false)
+        val debug by parser.option(ArgType.Boolean, shortName = "d", description = "Debug").default(false)
+        parser.parse(args)
+
         nu.pattern.OpenCV.loadShared()
         System.loadLibrary(org.opencv.core.Core.NATIVE_LIBRARY_NAME)
-        println("hello you")
+
         val image = Mat()
-        val input = VideoCapture("/Users/ssoper/Downloads/seattle_driving.mp4")
+        val input = VideoCapture(inputFilePath)
         val fourcc = VideoWriter.fourcc('H', '2', '6', '4')
-        // TODO: look closer at why i couldn't use mp4
-        val outputFile = File("/Users/ssoper/workspace/lane-detector/", "output.mov").absolutePath
+
+        val outputFile = File(outputFilePath)
+        if (outputFile.exists()) {
+            outputFile.delete()
+        }
+
         val fps = input.get(Videoio.CAP_PROP_FPS)
         val size = Size(input.get(Videoio.CAP_PROP_FRAME_WIDTH),input.get(Videoio.CAP_PROP_FRAME_HEIGHT))
-        val writer = VideoWriter(outputFile, fourcc, fps, size, true)
+        val writer = VideoWriter(outputFile.absolutePath, fourcc, fps, size, true)
 
-        println("FPS: $fps, Size: $size")
+        if (debug) {
+            println("Input file: ${File(inputFilePath).absolutePath}")
+            println("Output file: ${File(outputFilePath).absolutePath}")
+            println("FPS: $fps")
+            println("Size: $size")
+        }
+        println()
 
-        val frame = HighGui.createJFrame("canny", HighGui.WINDOW_AUTOSIZE)
-        frame.defaultCloseOperation = EXIT_ON_CLOSE
-        frame.setSize(size.width.toInt(), size.height.toInt())
+        var videoPanel: JLabel? = null
 
-        val videoPanel = JLabel()
-        frame.contentPane = videoPanel
-        frame.isVisible = true
+        if (showLive) {
+            videoPanel = JLabel()
+
+            val frame = HighGui.createJFrame("canny", HighGui.WINDOW_AUTOSIZE)
+            frame.defaultCloseOperation = EXIT_ON_CLOSE
+            frame.setSize(size.width.toInt(), size.height.toInt())
+            frame.contentPane = videoPanel
+            frame.isVisible = true
+        }
+
+        val frameCount = input.get(Videoio.CAP_PROP_FRAME_COUNT)
+        val progressBar = ProgressBar(frameCount)
 
         while (input.read(image)) {
-            val canny = canny(image)
-            val segment = segment(canny)
-            val lines = getLines(segment)
+            val canny = getEdges(image)
+            val slice = getSlice(canny)
+            val lines = getLines(slice)
             val visualized = visualize(image, lines)
 
-            videoPanel.icon = ImageIcon(HighGui.toBufferedImage(visualized))
-            videoPanel.repaint()
+            videoPanel?.icon = ImageIcon(HighGui.toBufferedImage(visualized))
+            videoPanel?.repaint()
+
+            progressBar.step()
+            print("\r$progressBar")
 
             if (writer.isOpened) {
                 writer.write(visualized)
             }
         }
 
+        progressBar.stepToEnd()
+        print("\r$progressBar")
+
         input.release()
         writer.release()
     }
 
-    private fun canny(source: Mat): Mat {
+    private fun getEdges(source: Mat): Mat {
         val gray = Mat()
         cvtColor(source, gray, COLOR_RGB2GRAY)
 
@@ -79,7 +104,7 @@ object Core {
         return dest
     }
 
-    private fun segment(source: Mat): Mat {
+    private fun getSlice(source: Mat): Mat {
         val height = source.height().toDouble()
         val width = source.width().toDouble()
 
@@ -101,45 +126,6 @@ object Core {
         return dest
     }
 
-    private class HoughLine(val source: Mat) {
-        val slope: MutableList<Double> = mutableListOf()
-        val yIntercept: MutableList<Double> = mutableListOf()
-
-        val slopeAvg: Double by lazy {
-            StatUtils.mean(slope.toDoubleArray())
-        }
-
-        val yInterceptAvg: Double by lazy {
-            StatUtils.mean(yIntercept.toDoubleArray())
-        }
-
-        val coordinates: Pair<Point, Point>
-            get() {
-                val y1 = source.height()
-
-                println(slope.toString())
-                println("slopeAvg ${slopeAvg}")
-                println("#####")
-                println(yIntercept.toString())
-                println("yinterceptAvg ${yInterceptAvg}")
-
-                // (720-150-321)/0.12
-                // 60/(3-(10+20+30)/80) axis=0 by column
-                // y=ax+b
-                // 72=(0.12)x+321
-
-                return Pair(
-                    Point((y1-yInterceptAvg)/slopeAvg, y1.toDouble()),
-                    Point((y1-150-yInterceptAvg)/slopeAvg,y1.toDouble()-150)
-                )
-            }
-
-        fun add(fitted: DoubleArray) {
-            slope.add(fitted[1])
-            yIntercept.add(fitted[0])
-        }
-    }
-
     private fun getLines(source: Mat): Pair<HoughLine, HoughLine> {
         val lines = Mat()
         HoughLinesP(source, lines,2.0, Math.PI/180, 100, 100.0, 50.0)
@@ -147,64 +133,23 @@ object Core {
         val left = HoughLine(source)
         val right = HoughLine(source)
 
-//        println("size: ${lines.size()}, dims ${lines.dims()}, channels ${lines.channels()}")
-//        println("rows ${lines.rows()}, cols ${lines.cols()}")
-//        println("cv4 ${lines.checkVector(4)}")
-
         for (row in 0 until lines.rows()) {
             val points: DoubleArray = lines.get(row, 0)
-            val pointA = Point(points[0], points[1])
-            val pointB = Point(points[2], points[3])
             val weighted = WeightedObservedPoints()
+            val fitter = PolynomialCurveFitter.create(1)
+
             weighted.add(points[0], points[1])
             weighted.add(points[2], points[3])
-            val fitter = PolynomialCurveFitter.create(1)
+
             val fitted = fitter.fit(weighted.toList())
-            val (yIntercept, slope) = fitted
+            val slope = fitted[1]
 
-//            val c = mk.ndarray(mk[mk[1.0, 2.0]])
-//            mk.stat.mean<Double, D2, D2>(c, 1)
-
-            println("******")
             if (slope < 0) {
                 left.add(fitted)
-                println("LEFT")
             } else {
                 right.add(fitted)
-                println("RIGHT")
-            }
-
-            println("point A $pointA, B $pointB")
-            println("yIntercept $yIntercept, slope $slope")
-        }
-
-//        if (left.coordinates == null) {
-//
-//        }
-
-        /*
-
-        println("left ${left.coordinates}")
-        println("@@@@@")
-        println("right ${right.coordinates}")
-        println("%%%%%%")
-        println()
-         */
-
-//        exitProcess(1)
-//        println(lines)
-/*
-        for (row in 0..lines.rows()) {
-            for (col in 0..lines.cols()) {
-                val thing = lines.get(row, col)
-                println(thing)
             }
         }
-        println("end!")
-        */
-
-//        println(lines.step1())
-//        println(lines.step1())
 
         return Pair(left, right)
     }
@@ -213,6 +158,7 @@ object Core {
         val grey = Mat.zeros(source.rows(), source.cols(), 0)
         val dest = Mat()
         cvtColor(grey, dest, COLOR_GRAY2RGB)
+
         val color = Scalar(0.0, 255.0, 0.0)
         line(dest, lines.first.coordinates.first, lines.first.coordinates.second, color, LINE_8)
         line(dest, lines.second.coordinates.first, lines.second.coordinates.second, color, LINE_8)

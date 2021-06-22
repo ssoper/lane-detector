@@ -13,9 +13,8 @@ repositories {
 
 dependencies {
     implementation("org.openpnp:opencv:4.5.1-2")
-    implementation("org.jetbrains.kotlinx:multik-api:0.0.1")
-    implementation("org.jetbrains.kotlinx:multik-default:0.0.1")
     implementation("org.apache.commons:commons-math3:3.6.1")
+    implementation("org.jetbrains.kotlinx:kotlinx-cli:0.3.2")
     testImplementation(kotlin("test"))
 }
 

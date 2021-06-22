@@ -4,27 +4,21 @@ import org.apache.commons.math3.stat.StatUtils
 import org.opencv.core.Mat
 import org.opencv.core.Point
 
-class HoughLine(val source: Mat) {
-    val slope: MutableList<Double> = mutableListOf()
-    val yIntercept: MutableList<Double> = mutableListOf()
+class HoughLine(private val source: Mat) {
+    private val slope: MutableList<Double> = mutableListOf()
+    private val yIntercept: MutableList<Double> = mutableListOf()
 
-    val slopeAvg: Double by lazy {
+    private val slopeAvg: Double by lazy {
         StatUtils.mean(slope.toDoubleArray())
     }
 
-    val yInterceptAvg: Double by lazy {
+    private val yInterceptAvg: Double by lazy {
         StatUtils.mean(yIntercept.toDoubleArray())
     }
 
     val coordinates: Pair<Point, Point>
         get() {
             val y1 = source.height()
-
-//                println(slope.toString())
-//                println("slopeAvg ${slopeAvg}")
-//                println("#####")
-//                println(yIntercept.toString())
-//                println("yinterceptAvg ${yInterceptAvg}")
 
             return Pair(
                 Point((y1-yInterceptAvg)/slopeAvg, y1.toDouble()),

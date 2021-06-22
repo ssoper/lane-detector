@@ -13,3 +13,6 @@ https://user-images.githubusercontent.com/12748/122929438-f101fa00-d338-11eb-840
     --debug, -d [false] -> Debug
     --help, -h -> Usage info 
 
+## Requirements
+
+- OSX with Quicktime installed. Other platforms can probably make use of FFMPEG but you’ll need to swap out the codec to match the extension.

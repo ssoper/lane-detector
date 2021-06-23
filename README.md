@@ -22,3 +22,7 @@ Use your favorite IDE to compile to a JAR.
 
 - OSX with Quicktime installed. Other platforms can probably make use of FFMPEG but you’ll need to swap out the codec to match the extension.
 - Java 11+
+
+## Resources
+
+* [Lane detection using Kotlin and OpenCV](https://seansoper.com/blog/lane_detection_opencv_kotlin.html)

@@ -8,7 +8,9 @@ import org.apache.commons.math3.fitting.WeightedObservedPoints
 import org.opencv.core.*
 import org.opencv.core.Core.addWeighted
 import org.opencv.core.Core.bitwise_and
+import org.opencv.dnn.TextDetectionModel_DB
 import org.opencv.highgui.HighGui
+import org.opencv.imgcodecs.Imgcodecs
 import org.opencv.imgproc.Imgproc.*
 import org.opencv.videoio.VideoCapture
 import org.opencv.videoio.VideoWriter
@@ -67,22 +69,87 @@ object Core {
         val frameCount = input.get(Videoio.CAP_PROP_FRAME_COUNT)
         val progressBar = ProgressBar(frameCount)
 
-        while (input.read(image)) {
-            val canny = getEdges(image)
-            val slice = getSlice(canny)
-            val lines = getLines(slice)
-            val visualized = visualize(image, lines)
+        // slow using db
+        // crash on last frame
+        // Exception in thread "main" CvException [org.opencv.core.CvException: cv::Exception: OpenCV(4.5.3) /Users/ssoper/workspace/opencv/opencv/opencv-4.5.3/modules/dnn/src/model.cpp:1216: error: (-215:Assertion failed) length > FLT_EPSILON in function 'unclip'
+        // https://github.com/opencv/opencv/blob/4.5.3/modules/dnn/src/model.cpp#L1216
+        //
+        // try diff models
 
-            videoPanel?.icon = ImageIcon(HighGui.toBufferedImage(visualized))
+        val model = File("/Users/ssoper/workspace/computer-vision/models/textbox/DB_IC15_resnet50.onnx")
+        val detector = TextDetectionModel_DB(model.absolutePath)
+
+        detector.binaryThreshold = 0.3f
+        detector.polygonThreshold = 0.5f
+        detector.maxCandidates = 200
+        detector.unclipRatio = 2.0
+
+        val scale = 1.0/255.0
+        val mean = Scalar(122.67891434, 116.66876762, 104.00698793)
+        val frameSize = Size(736.0, 1280.0)
+
+        detector.setInputParams(scale, frameSize, mean)
+
+        var count = 0
+        while (input.read(image) && count < 1500) {
+            val results: MutableList<MatOfPoint> = mutableListOf()
+
+            detector.detect(image, results)
+
+            val grey = Mat.zeros(image.rows(), image.cols(), 0)
+            val dest = Mat()
+            cvtColor(grey, dest, COLOR_GRAY2RGB)
+            polylines(dest, results, true, Scalar(0.0, 255.0, 0.0), 1)
+            val done = Mat()
+            addWeighted(image, 0.9, dest, 1.0, 1.0, done)
+
+            videoPanel?.icon = ImageIcon(HighGui.toBufferedImage(done))
             videoPanel?.repaint()
+
+            if (writer.isOpened) {
+                writer.write(done)
+            }
 
             progressBar.step()
             print("\r$progressBar")
-
-            if (writer.isOpened) {
-                writer.write(visualized)
-            }
+            count++
         }
+
+//        while (input.read(image)) {
+
+//            val canny = getEdges(image)
+//            val newcan = Mat()
+//            cvtColor(canny, newcan, COLOR_GRAY2RGB)
+//            val mats: MutableList<MatOfPoint> = mutableListOf()
+
+//            val mat = MatOfRotatedRect()
+//            val slice = getSlice2(singleImage)
+//            detector.detectTextRectangles(singleImage, mat)
+//
+//            println("Rectangles: ${mat.toArray().size}")
+//            val visualized = drawRect(singleImage, mat.toList())
+
+//            for (mat in mats) {
+//                println(mat)
+//            }
+
+//            val canny = getEdges(image)
+//            val slice = getSlice(canny)
+//            val lines = getLines(slice)
+//            val visualized = visualize(image, lines)
+
+//            videoPanel?.icon = ImageIcon(HighGui.toBufferedImage(done))
+//            videoPanel?.repaint()
+
+//            progressBar.step()
+//            print("\r$progressBar")
+
+//            if (writer.isOpened) {
+//                writer.write(visualized)
+//            }
+
+
+//        }
 
         progressBar.stepToEnd()
         print("\r$progressBar")
@@ -90,6 +157,8 @@ object Core {
         input.release()
         writer.release()
     }
+
+    // 360
 
     private fun getEdges(source: Mat): Mat {
         val gray = Mat()
@@ -100,6 +169,28 @@ object Core {
 
         val dest = Mat()
         Canny(blur, dest, 50.0, 150.0)
+
+        return dest
+    }
+
+    private fun getSlice2(source: Mat): Mat {
+        val polygons: List<MatOfPoint> = listOf(
+            MatOfPoint(
+                Point(360.0, 0.0),    // top left
+                Point(1096.0, 0.0),   // top right
+                Point(1096.0, 720.0), // bottom right
+                Point(360.0, 720.0)   // bottom left
+            )
+        )
+
+        val mask = Mat.zeros(source.rows(), source.cols(), 0)
+        fillPoly(mask, polygons, Scalar(255.0))
+
+        val converted = Mat()
+        cvtColor(mask, converted, COLOR_GRAY2RGB)
+
+        val dest = Mat()
+        bitwise_and(source, converted, dest)
 
         return dest
     }
@@ -152,6 +243,38 @@ object Core {
         }
 
         return Pair(left, right)
+    }
+
+    private fun drawRect(source: Mat, rectangles: List<RotatedRect>, color: Scalar = Scalar(0.0, 255.0, 0.0)): Mat {
+        val grey = Mat.zeros(source.rows(), source.cols(), 0)
+        val dest = Mat()
+        cvtColor(grey, dest, COLOR_GRAY2RGB)
+
+        for (rectangle in rectangles) {
+            val rect = rectangle.boundingRect()
+
+            println(rect)
+
+            line(
+                dest,
+                Point(rect.x.toDouble(), rect.y.toDouble()),
+                Point((rect.x + rect.width).toDouble(), rect.y.toDouble()),
+                color,
+                LINE_8
+            )
+            line(
+                dest,
+                Point((rect.x + rect.width).toDouble(), rect.y.toDouble()),
+                Point((rect.x + rect.width).toDouble(), (rect.y + rect.height).toDouble()),
+                color,
+                LINE_8
+            )
+        }
+
+        val done = Mat()
+        addWeighted(source, 0.9, dest, 1.0, 1.0, done)
+
+        return done
     }
 
     private fun visualize(source: Mat, lines: Pair<HoughLine, HoughLine>): Mat {

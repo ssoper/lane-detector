@@ -12,7 +12,9 @@ repositories {
 }
 
 dependencies {
-    implementation("org.openpnp:opencv:4.5.1-2")
+    // Temporarily disabled until new Maven package is cut
+    // implementation("org.openpnp:opencv:4.5.1-2")
+    implementation(files("src/main/libs/opencv-4.5.3.jar"))
     implementation("org.apache.commons:commons-math3:3.6.1")
     implementation("org.jetbrains.kotlinx:kotlinx-cli:0.3.2")
     testImplementation(kotlin("test"))

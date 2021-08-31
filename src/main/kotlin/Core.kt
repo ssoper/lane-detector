@@ -9,6 +9,7 @@ import org.opencv.core.*
 import org.opencv.core.Core.addWeighted
 import org.opencv.core.Core.bitwise_and
 import org.opencv.dnn.TextDetectionModel_DB
+import org.opencv.dnn.TextDetectionModel_EAST
 import org.opencv.highgui.HighGui
 import org.opencv.imgcodecs.Imgcodecs
 import org.opencv.imgproc.Imgproc.*
@@ -75,23 +76,53 @@ object Core {
         // https://github.com/opencv/opencv/blob/4.5.3/modules/dnn/src/model.cpp#L1216
         //
         // try diff models
+        // - DB_IC15_resnet50.onnx was one frame per 1.1s at 736x736
+        // - DB_TD500_resnet50.onnx was one frame per 1.1s at 736x736
+        // - caffemodel was one frame per 5s, also didnt work
+        // - EAST frozen_east_text_detection.pb was 10 frames per second at 320x320
+        //
+        // biggest hangup is in the net.forward call
+        // blobFromImage: 5ms
+        // getLayer: 0ms
+        // forward: 1203ms
+        // processFrame: 1209ms
+        // threshold: 0ms
+        // findContours: 0ms
+        //
+        // open questions
+        // how do you know the frame size of the model
+        // how do you know the scalar values
+        // how do you train (classify?) and get a model file
+        // where does coreml fit in
 
-        val model = File("/Users/ssoper/workspace/computer-vision/models/textbox/DB_IC15_resnet50.onnx")
+//        val model = File("/Users/ssoper/workspace/computer-vision/models/textbox/DB_TD500_resnet50.onnx")
+//        val model = File("/Users/ssoper/workspace/computer-vision/models/textbox/textbox.caffemodel")
+//        val conf = File("/Users/ssoper/workspace/computer-vision/models/textbox/textbox.prototxt")
+        val model = File("/Users/ssoper/workspace/computer-vision/models/textbox/frozen_east_text_detection.pb")
+/*
         val detector = TextDetectionModel_DB(model.absolutePath)
 
         detector.binaryThreshold = 0.3f
         detector.polygonThreshold = 0.5f
         detector.maxCandidates = 200
         detector.unclipRatio = 2.0
-
         val scale = 1.0/255.0
         val mean = Scalar(122.67891434, 116.66876762, 104.00698793)
-        val frameSize = Size(736.0, 1280.0)
+        val frameSize = Size(736.0, 736.0)
 
         detector.setInputParams(scale, frameSize, mean)
+*/
+        val detector = TextDetectionModel_EAST(model.absolutePath)
+        detector.confidenceThreshold = 0.5f
+        detector.nmsThreshold = 0.4f
+
+        val scale = 1.0
+        val frameSize = Size(320.0, 320.0)
+        val mean = Scalar(123.68, 116.78, 103.94)
+        detector.setInputParams(scale, frameSize, mean, true)
 
         var count = 0
-        while (input.read(image) && count < 1500) {
+        while (input.read(image) && count < 500) {
             val results: MutableList<MatOfPoint> = mutableListOf()
 
             detector.detect(image, results)
@@ -111,7 +142,7 @@ object Core {
             }
 
             progressBar.step()
-            print("\r$progressBar")
+            // print("\r$progressBar")
             count++
         }
 
